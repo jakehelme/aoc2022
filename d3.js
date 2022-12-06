@@ -27,7 +27,7 @@ function convertToPriority(item) {
 	return charCode >= 97 ? charCode - 96 : charCode - 38;
 }
 
-console.log(`Part 1: ${prioTot}`);
+console.log(prioTot);
 
 let badgePrioTot = 0;
 for (let i = 0; i < rucksackContents.length; i += 3) {
@@ -43,4 +43,4 @@ for (let i = 0; i < rucksackContents.length; i += 3) {
 	}
 }
 
-console.log(`Part 2: ${badgePrioTot}`);
+console.log(badgePrioTot);
