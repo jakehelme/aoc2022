@@ -34,24 +34,25 @@ outputs.forEach((line) => {
 const dirSizes = [];
 
 function calcDirSizes(dir) {
-    let size = 0;
-    Object.keys(dir).forEach((key) => {
-        if(key === 'parent') {
-            return;
-        }
-        else if (typeof dir[key] === 'object' && dir[key] !== null) {
-            size += calcDirSizes(dir[key]);
-        } else {
-            size += dir[key];
-        }
-    });
-    dirSizes.push(size);
-    return size;
+	let size = 0;
+	Object.keys(dir).forEach((key) => {
+		if (key === 'parent') {
+			return;
+		} else if (typeof dir[key] === 'object' && dir[key] !== null) {
+			size += calcDirSizes(dir[key]);
+		} else {
+			size += dir[key];
+		}
+	});
+	dirSizes.push(size);
+	return size;
 }
 
 const rootSize = calcDirSizes(tree);
 
-console.log(dirSizes.filter(dir => dir <= 100000).reduce((tot, size) => tot + size, 0));
+console.log(
+	dirSizes.filter((dir) => dir <= 100000).reduce((tot, size) => tot + size, 0)
+);
 
 const totalSpace = 70000000;
 const needed = 30000000;
@@ -59,6 +60,8 @@ const needed = 30000000;
 const unused = totalSpace - rootSize;
 const deleteAtLeast = needed - unused;
 
-const qualifying = dirSizes.filter(dir => dir >= deleteAtLeast).sort((a,b) => a - b);
+const qualifying = dirSizes
+	.filter((dir) => dir >= deleteAtLeast)
+	.sort((a, b) => a - b);
 
 console.log(qualifying[0]);
