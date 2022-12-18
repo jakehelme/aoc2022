@@ -110,7 +110,6 @@ function countExternalSurfaces(pos) {
 	return externalSurfaces;
 }
 
-const start = performance.now();
 let totalExternalSurfaces = 0;
 for (let x = 0; x < grid.length; x++) {
 	for (let y = 0; y < grid[0].length; y++) {
