@@ -1,110 +1,113 @@
+// Heavily 'inspired' by this approach: https://github.com/CodingAP/advent-of-code/blob/main/profiles/github/2022/day16/solution.js
 const fs = require('fs');
 const raw = fs.readFileSync('./d16.txt', 'utf8');
 
-const valves = raw.split('\n').reduce((dict, row) => {
+const travelDistances = {};
+const valveRates = {};
+const tunnels = {};
+
+raw.split('\n').forEach((row) => {
 	const matches = row.match(
 		/^Valve (\w+) has flow rate=(\d+); tunnels? leads? to valves? (.*)$/
 	);
 	const [_, valveName, flowRate, tunnelDestinations] = matches;
-	dict[valveName] = {
-		rate: Number(flowRate),
-		tunnels: tunnelDestinations.split(', '),
-	};
-	return dict;
-}, {});
+	tunnels[valveName] = tunnelDestinations.split(', ');
+	valveRates[valveName] = Number(flowRate);
+});
 
-const maxMinutes = 30;
-// const startingScenario = createNewScenario(0, 1, 'AA', new Set());
+function getDistance(start, end) {
+	const frontier = [start];
+	const cameFrom = { [start]: null };
 
-// function createNewScenario(
-// 	pressureReleased,
-// 	minuteIndex,
-// 	currentValve,
-// 	openValves
-// ) {
-// 	return { pressureReleased, minuteIndex, currentValve, openValves };
-// }
+	while (frontier.length) {
+		const current = frontier.shift();
+		if (current === end) break;
 
-function permute(permutation) {
-	var length = permutation.length,
-		result = [permutation.slice()],
-		c = new Array(length).fill(0),
-		i = 1, k, p;
-  
-	while (i < length) {
-	  if (c[i] < i) {
-		k = i % 2 && c[i];
-		p = permutation[i];
-		permutation[i] = permutation[k];
-		permutation[k] = p;
-		++c[i];
-		i = 1;
-		result.push(permutation.slice());
-	  } else {
-		c[i] = 0;
-		++i;
-	  }
+		for (const next of tunnels[current]) {
+			if (!cameFrom[next]) {
+				frontier.push(next);
+				cameFrom[next] = current;
+			}
+		}
 	}
-	return result;
-  }
 
-const workingValves = [];
+	let current = end;
+	const path = [];
+	while (current !== start) {
+		path.push(current);
+		current = cameFrom[current];
+	}
+	return path.length;
+}
 
-for (const valve in valves) {
-	if (Object.hasOwnProperty.call(valves, valve)) {
-		if (valves[valve].rate) workingValves.push(valve);
+function turnOnValves(valve, minutes, valvesLeft, openValves) {
+	const permutations = [openValves];
+
+	for (const [i, nextValve] of valvesLeft.entries()) {
+		const nextMinutes = minutes - travelDistances[valve][nextValve] - 1;
+		if (nextMinutes < 1) continue;
+
+		let nextOpenValves = JSON.parse(JSON.stringify(openValves));
+		nextOpenValves[nextValve] = nextMinutes;
+
+		let nextValvesLeft = [...valvesLeft];
+		nextValvesLeft.splice(i, 1);
+
+		permutations.push(
+			...turnOnValves(nextValve, nextMinutes, nextValvesLeft, nextOpenValves)
+		);
+	}
+
+	return permutations;
+}
+
+for (const start in tunnels) {
+	travelDistances[start] = {};
+	for (const end in tunnels) {
+		travelDistances[start][end] = getDistance(start, end);
 	}
 }
 
-const combos = permute(Object.keys(workingValves));
+const goodValves = Object.keys(valveRates).filter((v) => valveRates[v]);
 
-console.log(combos.length);
+let permutations = turnOnValves('AA', 30, goodValves, {});
+const pressureReleased = permutations
+	.map((p) => Object.entries(p))
+	.map((p) =>
+		p.reduce((tot, [valve, minutes]) => tot + valveRates[valve] * minutes, 0)
+	);
 
-// function progressMinute(state) {
-// 	const scenarios = [];
-// 	// check valves open
-// 	let pressure = state.pressureReleased;
-// 	for (const valve of state.openValves) {
-// 		pressure += valves[valve].rate;
-// 	}
+pressureReleased.sort((a, b) => b - a);
 
-// 	// do something: open valve, move to different valve, do nothing
-// 	if (
-// 		state.currentValve !== 'AA' &&
-// 		!state.openValves.has(state.currentValve) &&
-// 		valves[state.currentValve].rate
-// 	) {
-// 		scenarios.push(
-// 			createNewScenario(
-// 				pressure,
-// 				state.minuteIndex + 1,
-// 				state.currentValve,
-// 				new Set([...state.openValves, state.currentValve])
-// 			)
-// 		);
-// 	}
+console.log(pressureReleased[0]);
 
-// 	for (const tunnel of valves[state.currentValve].tunnels) {
-// 		scenarios.push(
-// 			createNewScenario(
-// 				pressure,
-// 				state.minuteIndex + 1,
-// 				tunnel,
-// 				new Set([...state.openValves])
-// 			)
-// 		);
-// 	}
+permutations = turnOnValves('AA', 26, goodValves, {});
+const maxScores = {};
 
-// 	return scenarios;
-// }
+permutations.forEach((p) => {
+	const key = Object.keys(p).sort().join('|');
+	const score = Object.entries(p).reduce(
+		(tot, [key, value]) => tot + valveRates[key] * value,
+		0
+	);
 
-// let scenarios = progressMinute(startingScenario);
-// while(scenarios[0].minuteIndex <= maxMinutes) {
-// 	const nextScenarios = [];
-// 	for (const result of scenarios) {
-// 		nextScenarios.push(...progressMinute(result));
-// 	}
-// 	scenarios = nextScenarios;
-// }
+	if (maxScores[key] == null) maxScores[key] = -Infinity;
+	maxScores[key] = Math.max(score, maxScores[key]);
+});
 
-console.log();
+let max = -Infinity;
+Object.keys(maxScores).forEach((player) => {
+	Object.keys(maxScores).forEach((elephant) => {
+		const valveSet = new Set();
+		const playerList = player.split('|');
+		playerList.forEach((valve) => valveSet.add(valve));
+		const elephantList = elephant.split('|');
+		elephantList.forEach((valve) => valveSet.add(valve));
+
+		if (valveSet.size === playerList.length + elephantList.length) {
+			max = Math.max(maxScores[player] + maxScores[elephant], max);
+		}
+	});
+});
+
+console.log(max);
