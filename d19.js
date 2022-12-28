@@ -13,6 +13,146 @@ const blueprints = raw.split('\n').map((l) => {
 	};
 });
 
+function getKey(state) {
+	return `${state.minutes}|${state.robots.ore}|${state.robots.clay}|${state.robots.obsidian}|${state.robots.geode}|${state.ore}|${state.clay}|${state.obsidian}|${state.geode}`;
+}
+
+function getState(key) {
+	const [min, ro, rc, rb, rg, o, c, b, g] = key.split('|');
+	return {
+		minutes: Number(min),
+		robots: {
+			ore: Number(ro),
+			clay: Number(rc),
+			obsidian: Number(rb),
+			geode: Number(rg)
+		},
+		ore: Number(o),
+		clay: Number(c),
+		obsidian: Number(b),
+		geode: Number(g)
+	};
+}
+
+function getStateWhenRobotIsBuilt(robotType, current, blueprint, length) {
+	const currentState = getState(current);
+	const cost = blueprints[blueprint][`${robotType}Robot`];
+	const minutesForOre = Math.max(
+		Math.ceil((cost.ore - currentState.ore) / currentState.robots.ore) + 1,
+		1
+	);
+	let waitTime;
+	switch (robotType) {
+		case 'ore':
+		case 'clay':
+			waitTime = minutesForOre;
+			break;
+		case 'obsidian':
+			const minutesForClay = Math.max(
+				Math.ceil((cost.clay - currentState.clay) / currentState.robots.clay) +	1,
+				1
+			);
+			waitTime = Math.max(minutesForOre, minutesForClay);
+			break;
+		case 'geode':
+			const minutesForObsidian = Math.max(
+				Math.ceil(
+					(cost.obsidian - currentState.obsidian) / currentState.robots.obsidian) + 1,
+				1
+			);
+			waitTime = Math.max(minutesForOre, minutesForObsidian);
+			break;
+	}
+	const nextState = structuredClone(currentState);
+	let canBuildBeforeEnd = true;
+	if (currentState.minutes + waitTime >= length) {
+		waitTime = length - currentState.minutes;
+		canBuildBeforeEnd = false;
+	}
+
+	nextState.minutes += waitTime;
+	nextState.ore += waitTime * nextState.robots.ore;
+	nextState.clay += waitTime * nextState.robots.clay;
+	nextState.obsidian += waitTime * nextState.robots.obsidian;
+	nextState.geode += waitTime * nextState.robots.geode;
+
+	if (canBuildBeforeEnd) {
+		nextState.ore -= cost.ore;
+		nextState.clay -= cost.clay ? cost.clay : 0;
+		nextState.obsidian -= cost.obsidian ? cost.obsidian : 0;
+		nextState.robots[robotType] += 1;
+	}
+
+	return getKey(nextState);
+}
+
+function getNextStates(current, blueprint, length) {
+	const currentState = getState(current);
+	const nextStates = [];
+	const shouldBuildOreRobot =
+		currentState.robots.ore * (length - currentState.minutes) +
+			currentState.ore <
+		(length - currentState.minutes) *
+			Math.max(
+				blueprints[blueprint].oreRobot.ore,
+				blueprints[blueprint].clayRobot.ore,
+				blueprints[blueprint].obsidianRobot.ore,
+				blueprints[blueprint].geodeRobot.ore
+			);
+	const shouldBuildClayRobot =
+		currentState.robots.clay * (length - currentState.minutes) +
+			currentState.clay <
+		(length - currentState.minutes) * blueprints[blueprint].obsidianRobot.clay;
+
+	const shouldBuildObsidianRobot =
+		currentState.robots.obsidian * (length - currentState.minutes) +
+			currentState.obsidian <
+		(length - currentState.minutes) * blueprints[blueprint].geodeRobot.obsidian;
+
+	if (shouldBuildOreRobot)
+		nextStates.push(
+			getStateWhenRobotIsBuilt('ore', current, blueprint, length)
+		);
+	if (shouldBuildClayRobot)
+		nextStates.push(
+			getStateWhenRobotIsBuilt('clay', current, blueprint, length)
+		);
+	if (currentState.robots.clay > 0 && shouldBuildObsidianRobot)
+		nextStates.push(
+			getStateWhenRobotIsBuilt('obsidian', current, blueprint, length)
+		);
+
+	if (currentState.robots.obsidian > 0)
+		nextStates.push(
+			getStateWhenRobotIsBuilt('geode', current, blueprint, length)
+		);
+	return nextStates;
+}
+
+function dfs(start, blueprint, length) {
+	const frontier = [];
+	frontier.push(start);
+	const reached = new Set();
+	reached.add(start);
+	let maxGeodes = 0;
+
+	while (frontier.length) {
+		const current = frontier.pop();
+		const currentState = getState(current);
+		if (currentState.minutes === length) {
+			maxGeodes = Math.max(currentState.geode, maxGeodes);
+			continue;
+		}
+		for (const next of getNextStates(current, blueprint, length)) {
+			if (!reached.has(next)) {
+				frontier.push(next);
+				reached.add(next);
+			}
+		}
+	}
+	return maxGeodes;
+}
+
 function getMaxGeodes(blueprint, length) {
 	const startingState = {
 		minutes: 0,
@@ -23,158 +163,25 @@ function getMaxGeodes(blueprint, length) {
 		geode: 0
 	};
 
-	// let permutations = { [getKey(startingState)]: startingState };
-	// let permutations = [startingState];
-
-	function getKey(state) {
-		return `${state.minutes}|${state.robots.ore}|${state.robots.clay}|${state.robots.obsidian}|${state.robots.geode}|${state.ore}|${state.clay}|${state.obsidian}|${state.geode}`;
-	}
-
-	function getState(key) {
-		const [min, ro, rc, rb, rg, o, c, b, g] = key.split('|');
-		return {
-			minutes: Number(min),
-			robots: {
-				ore: Number(ro),
-				clay: Number(rc),
-				obsidian: Number(rb),
-				geode: Number(rg)
-			},
-			ore: Number(o),
-			clay: Number(c),
-			obsidian: Number(b),
-			geode: Number(g)
-		};
-	}
-
-	function dfs(start) {
-		const frontier = [];
-		frontier.push(start);
-		const reached = {};
-		reached[start] = null;
-		// let geodesMade = [];
-		let maxGeodes = 0;
-
-		while (frontier.length) {
-			const current = frontier.pop();
-			const currentState = getState(current);
-			if (currentState.minutes === length) {
-				// geodesMade.push(currentState.geode);
-				// console.log(currentState.geode);
-				maxGeodes = Math.max(currentState.geode, maxGeodes);
-				continue;
-			}
-			for (const next of elapseMinute(current)) {
-				if (!reached[next]) {
-					frontier.push(next);
-					reached[next] = null;
-				}
-			}
-		}
-		return maxGeodes;
-	}
-
-	function elapseMinute(key) {
-		const state = getState(key);
-		state.minutes += 1;
-		const nextStates = [];
-
-		const canBuildOreRobot = blueprints[blueprint].oreRobot.ore <= state.ore;
-		const canBuildClayRobot = blueprints[blueprint].clayRobot.ore <= state.ore;
-		const canBuildObsidianRobot =
-			blueprints[blueprint].obsidianRobot.ore <= state.ore &&
-			blueprints[blueprint].obsidianRobot.clay <= state.clay;
-		const canBuildGeodeRobot =
-			blueprints[blueprint].geodeRobot.ore <= state.ore &&
-			blueprints[blueprint].geodeRobot.obsidian <= state.obsidian;
-
-		// const shouldBuildOreRobot = state.robots.ore < 6;
-		const shouldBuildOreRobot =
-			state.robots.ore * (length - state.minutes) + state.ore <
-			(length - state.minutes) *
-				Math.max(
-					blueprints[blueprint].oreRobot.ore,
-					blueprints[blueprint].clayRobot.ore,
-					blueprints[blueprint].obsidianRobot.ore,
-					blueprints[blueprint].geodeRobot.ore
-				);
-		const shouldBuildClayRobot =
-			state.robots.clay * (length - state.minutes) + state.clay <
-			(length - state.minutes) * blueprints[blueprint].obsidianRobot.clay;
-
-		const shouldBuildObsidianRobot =
-			state.robots.obsidian * (length - state.minutes) + state.obsidian <
-			(length - state.minutes) * blueprints[blueprint].geodeRobot.obsidian;
-
-		for (const material in state.robots) {
-			const robotCount = state.robots[material];
-			state[material] += robotCount;
-		}
-
-		if (canBuildGeodeRobot) {
-			const newState = structuredClone(state);
-			newState.robots.geode += 1;
-			newState.ore -= blueprints[blueprint].geodeRobot.ore;
-			newState.obsidian -= blueprints[blueprint].geodeRobot.obsidian;
-			nextStates.push(getKey(newState));
-			return nextStates;
-		}
-
-		nextStates.push(getKey(state));
-		if (canBuildOreRobot && shouldBuildOreRobot) {
-			const newState = structuredClone(state);
-			newState.robots.ore += 1;
-			newState.ore -= blueprints[blueprint].oreRobot.ore;
-			nextStates.push(getKey(newState));
-		}
-		if (canBuildClayRobot && shouldBuildClayRobot) {
-			const newState = structuredClone(state);
-			newState.robots.clay += 1;
-			newState.ore -= blueprints[blueprint].clayRobot.ore;
-			nextStates.push(getKey(newState));
-		}
-		if (canBuildObsidianRobot && shouldBuildObsidianRobot) {
-			const newState = structuredClone(state);
-			newState.robots.obsidian += 1;
-			newState.ore -= blueprints[blueprint].obsidianRobot.ore;
-			newState.clay -= blueprints[blueprint].obsidianRobot.clay;
-			nextStates.push(getKey(newState));
-		}
-		
-
-		return nextStates;
-	}
-
-	return dfs(getKey(startingState));
-
-	// 	while (permutations[0].minutes <= 23) {
-	// 		const nextStates = [];
-	// 		permutations.forEach((state) => {
-	// 			nextStates.push(...elapseMinute(state));
-	// 		});
-	// 		permutations = nextStates;
-	// 	}
-	// 	const maxGeodes = permutations.reduce(
-	// 		(max, p) => (p.geode > max ? p.geode : max),
-	// 		0
-	// 	);
-	// 	return maxGeodes;
-	// }
+	const result = dfs(getKey(startingState), blueprint, length);
+	return result;
 }
-// let qualitySum = 0;
-// for (let i = 0; i < blueprints.length; i++) {
-// 	const result = getMaxGeodes(i, 24);
-// 	console.log(i, result);
-// 	qualitySum += result * (i + 1);
-// }
 
-// console.log(qualitySum);
+console.time('Part 1');
+let qualitySum = 0;
+for (let i = 0; i < blueprints.length; i++) {
+	const result = getMaxGeodes(i, 24);
+	qualitySum += result * (i + 1);
+}
+console.log(qualitySum);
+console.timeEnd('Part 1');
 
+console.time('Part 2');
 const maxGeodes = [];
-for(let i = 0; i < 3; i++) {
+for (let i = 0; i < 3; i++) {
 	const result = getMaxGeodes(i, 32);
-	console.log(i, result);
 	maxGeodes.push(result);
-};
+}
 
 console.log(maxGeodes.reduce((tot, g) => tot * g, 1));
+console.timeEnd('Part 2');
